@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-environment-component@1.3.0/dist/aframe-environment-component.min.js"></script>
+    <script src="aframe-physics-system.min.js"></script>
+    <script type="module" src="/src/main.js"></script>
+    <title>AFRAME Survival Game</title>
+    <style>
+        body { margin: 0; }
+    </style>
+</head>
+<body>
+    <a-scene physics="gravity: -3">
+        <a-entity environment="preset: egypt; groundColor: #C19A6B; groundColor2: #C19A6B; dressing: pyramids"></a-entity>
+
+        <a-entity>
+            <a-text id="banner-text" position="-2 10 -4" color="black" font="https://cdn.aframe.io/fonts/mozillavr.fnt"></a-text>
+            <a-text id="score-text" position="1 8 -4" value="Score: 0" color="black" font="https://cdn.aframe.io/fonts/mozillavr.fnt"></a-text>
+            <a-text id="health-text" position="-3 8 -4" value="Health: 100" color="black" font="https://cdn.aframe.io/fonts/mozillavr.fnt"></a-text>
+            <a-text id="timer-text" position="0 7 -4" value="Time: 0" color="black" font="https://cdn.aframe.io/fonts/mozillavr.fnt"></a-text>
+
+            <!-- Enemies (generated randomly) -->
+            <a-box id="enemy1" enemy="true" static-body="shape: box" depth="0.5" height="1" width="1" class="enemy" dynamic-body="mass: 1; friction: 0.5; restitution: 0.7"></a-box>
+            <a-box id="enemy2" enemy="true" static-body="shape: box" depth="0.5" height="1" width="1" class="enemy" dynamic-body="mass: 1; friction: 0.5; restitution: 0.7"></a-box>
+            <a-box id="enemy3" enemy="true" static-body="shape: box" depth="0.5" height="1" width="1" class="enemy" dynamic-body="mass: 1; friction: 0.5; restitution: 0.7"></a-box>
+            <a-box id="enemy4" enemy="true" static-body="shape: box" depth="0.5" height="1" width="1" class="enemy" dynamic-body="mass: 1; friction: 0.5; restitution: 0.7"></a-box>
+            <a-box id="enemy5" enemy="true" static-body="shape: box" depth="0.5" height="1" width="1" class="enemy" dynamic-body="mass: 1; friction: 0.5; restitution: 0.7"></a-box>
+            <a-box id="enemy6" enemy="true" static-body="shape: box" depth="0.5" height="1" width="1" class="enemy" dynamic-body="mass: 1; friction: 0.5; restitution: 0.7"></a-box>
+        </a-entity>
+
+        <a-entity>
+            <a-entity id="camera" camera look-controls position="0 5 4" wasd-controls="wsAxis:y; wsInverted:true" player>
+                <a-text id="info-text" width="7" position="-6.5 -2.8 -4" color="black" font="https://cdn.aframe.io/fonts/mozillavr.fnt"></a-text>
+                <a-cursor intersection-spawn="Event: click; mixin: voxel"></a-cursor>
+            </a-entity>
+            <a-entity oculus-touch-controls="hand: left" trigger-check></a-entity>
+            <a-entity id="rtcontroller" oculus-touch-controls="hand: right" trigger-check raycaster="showLine: true"></a-entity>
+        </a-entity>
+    </a-scene>
+
+    <script>
+        let score = 0;
+        let health = 100;
+        let gameStarted = false;
+        let timer = 0;
+        let difficultyMultiplier = 1;
+        const enemies = Array.from(document.querySelectorAll('.enemy'));
+        const player = document.querySelector('#camera');
+        const healthText = document.querySelector('#health-text');
+        const scoreText = document.querySelector('#score-text');
+        const timerText = document.querySelector('#timer-text');
+        const infoText = document.querySelector('#info-text');
+
+        function getRandomPosition(minDistance = 5) {
+            const maxRange = 20;
+            const cameraPos = player.getAttribute('position');
+            let randomX, randomZ, distance;
+
+            do {
+                randomX = (Math.random() * maxRange) - (maxRange / 2) + cameraPos.x;
+                randomZ = (Math.random() * maxRange) - maxRange + cameraPos.z;
+                distance = Math.sqrt(Math.pow(randomX - cameraPos.x, 2) + Math.pow(randomZ - cameraPos.z, 2));
+            } while (distance < minDistance);
+
+            return { x: randomX, y: 2, z: randomZ };
+        }
+
+        function spawnEnemies() {
+            enemies.forEach(enemy => {
+                const randomPos = getRandomPosition();
+                enemy.setAttribute('position', randomPos);
+                enemy.setAttribute('visible', true);
+            });
+        }
+
+        function moveEnemies(deltaTime) {
+            const playerPos = player.getAttribute('position');
+
+            enemies.forEach(enemy => {
+                if (!enemy.getAttribute('visible')) return;
+
+                const enemyPos = enemy.getAttribute('position');
+                const dx = playerPos.x - enemyPos.x;
+                const dz = playerPos.z - enemyPos.z;
+                const distance = Math.sqrt(dx * dx + dz * dz);
+
+                if (distance > 2) {
+                    const directionX = dx / distance;
+                    const directionZ = dz / distance;
+                    const speed = 0.05 * difficultyMultiplier;
+
+                    enemy.setAttribute('position', {
+                        x: enemyPos.x + directionX * speed * deltaTime,
+                        y: enemyPos.y,
+                        z: enemyPos.z + directionZ * speed * deltaTime
+                    });
+                }
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space') {
+                const camera = document.querySelector('#camera');
+                const direction = new THREE.Vector3();
+                camera.object3D.getWorldDirection(direction);
+
+                const raycaster = new THREE.Raycaster();
+                const pos = new THREE.Vector3();
+                camera.object3D.getWorldPosition(pos);
+                raycaster.set(pos, direction);
+
+                const enemyObjects = enemies.map(enemy => enemy.object3D);
+                const intersects = raycaster.intersectObjects(enemyObjects, true);
+
+                if (intersects.length > 0) {
+                    const hitEnemyObject = intersects[0].object;
+                    const hitEnemy = hitEnemyObject.el;
+
+                    if (hitEnemy && hitEnemy.getAttribute('visible')) {
+                        hitEnemy.setAttribute('visible', false);
+                        score += 10;
+                        scoreText.setAttribute('value', `Score: ${score}`);
+                    }
+                }
+            }
+        });
+
+        function checkCollisions() {
+            const playerPos = player.getAttribute('position');
+            let visibleEnemies = 0;
+
+            enemies.forEach(enemy => {
+                if (!enemy.getAttribute('visible')) return;
+
+                visibleEnemies++;
+                const enemyPos = enemy.getAttribute('position');
+                const distance = Math.sqrt(
+                    Math.pow(playerPos.x - enemyPos.x, 2) +
+                    Math.pow(playerPos.z - enemyPos.z, 2)
+                );
+
+                if (distance < 2) {
+                    health -= 1;
+                    healthText.setAttribute('value', `Health: ${health}`);
+                    if (health <= 0) {
+                        alert(`Game Over! You survived for ${timer} seconds.`);
+                        resetGame();
+                    }
+                }
+            });
+        }
+
+        function startGame() {
+            if (gameStarted) return;
+            gameStarted = true;
+
+            infoText.setAttribute('value', 'Game Starting...');
+            const countdown = setInterval(() => {
+                infoText.setAttribute('value', 'Game Started!');
+                clearInterval(countdown);
+                spawnEnemies();
+                previousTime = performance.now();
+                requestAnimationFrame(gameLoop);
+                spawnInterval = setInterval(spawnEnemies, 5000 / difficultyMultiplier);
+            }, 1000);
+        }
+
+        function resetGame() {
+            health = 100;
+            timer = 0;
+            score = 0;
+            difficultyMultiplier = 1;
+            healthText.setAttribute('value', `Health: ${health}`);
+            scoreText.setAttribute('value', `Score: ${score}`);
+            timerText.setAttribute('value', `Time: ${timer}`);
+            enemies.forEach(enemy => enemy.setAttribute('visible', false));
+            gameStarted = false;
+            infoText.setAttribute('value', 'Game Restarted!');
+            clearInterval(spawnInterval);
+            startGame();
+        }
+
+        function gameLoop(currentTime) {
+            const deltaTime = (currentTime - previousTime) / 16.666;
+            previousTime = currentTime;
+
+            timer += deltaTime;
+            timerText.setAttribute('value', `Time: ${Math.floor(timer)}`);
+
+            // Increase difficulty every 30 seconds
+            if (Math.floor(timer) % 30 === 0 && Math.floor(timer) !== 0) {
+                difficultyMultiplier += 0.1;
+            }
+
+            moveEnemies(deltaTime);
+            checkCollisions();
+
+            if (gameStarted) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        let previousTime = 0;
+        let spawnInterval;
+
+        startGame();
+    </script>
+</body>
+</html>

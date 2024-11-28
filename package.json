@@ -1,0 +1,16 @@
+{
+  "name": "aframe-shooting-game",
+  "version": "1.0.0",
+  "description": "A VR shooting game built with A-Frame",
+  "main": "index.js",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "three": "^0.158.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
